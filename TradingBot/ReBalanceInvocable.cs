@@ -1,13 +1,15 @@
 ﻿using Coravel.Invocable;
+using MyAlpacaStrategyLib;
 
 namespace TradingBot
 {
     public class ReBalanceInvocable : IInvocable
     {
-
-        public Task Invoke()
+        public async Task Invoke()
         {
-            throw new NotImplementedException();
+            var a = new ReBalanceOperation();
+            await a.TryReBalanceAll();
+            Console.WriteLine("========================");
         }
     }
 }

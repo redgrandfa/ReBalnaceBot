@@ -9,7 +9,6 @@ namespace MyAlpacaStrategyLib
 {
     public static class AssetHelpers
     {
-
         /// <summary>
         /// 是否可交易 (休市 停盤  封鎖特定企業)
         /// </summary>
@@ -18,7 +17,7 @@ namespace MyAlpacaStrategyLib
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
 
-        public static async Task<bool> CheckSymbolTrable(this IAlpacaTradingClient client , string symbol)
+        public static async Task<bool> CheckSymbolTradable(this IAlpacaTradingClient client , string symbol)
         {
             //See If a Particular Asset is Tradable on Alpaca #
             try
@@ -56,5 +55,22 @@ namespace MyAlpacaStrategyLib
         //{
         //    Console.WriteLine(symbol);
         //}
+    }
+
+
+    public class PlanItemKeyInfo
+    {
+        public readonly string symbol;
+        public readonly decimal percent;
+        public readonly bool isFractionable;
+        public PlanItemKeyInfo(string symbol, decimal percent, bool isFractionable)
+        {
+            this.symbol = symbol;
+            this.percent = percent;
+            this.isFractionable = isFractionable;
+        }
+        public PlanItemKeyInfo(string symbol, decimal percent) : this(symbol, percent, true)
+        {
+        }
     }
 }

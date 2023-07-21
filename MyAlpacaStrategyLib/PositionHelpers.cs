@@ -8,15 +8,24 @@ namespace MyAlpacaStrategyLib
     //"current_price":20077.0,
 
     //"side":"long",
+
+    //IReadOnlyList<IPosition> positions = await client.ListPositionsAsync();
+    //IPosition symbolPosition = await client.GetPositionAsync(symbol);
+
+
+    /// <summary>
+    /// 無倉 => 市值 0m，單價null
+    /// 有倉 => 市值 decimal? ，單價decimal?
+    /// </summary>
     public class PositionKeyOnfo
     {
         public readonly string symbol;
         public readonly decimal qty;
         public readonly decimal? unitPrice;
         public readonly decimal? marketValue;
-        public readonly bool isFractionable =true;
+        public bool? isFractionable = null;
 
-        public PositionKeyOnfo(string symbol, decimal qty, decimal unitPrice, decimal marketValue)
+        public PositionKeyOnfo(string symbol, decimal qty, decimal? unitPrice, decimal? marketValue)
         {
             this.symbol = symbol;
             this.qty = qty;
@@ -24,27 +33,26 @@ namespace MyAlpacaStrategyLib
             this.marketValue = marketValue;
         }
 
-        public PositionKeyOnfo(string symbol):this(symbol, 0, 0, 0) //目前無持倉
-        {
-        }
+        /// <summary>
+        /// 目前無持倉的假部位
+        /// </summary>
+        public PositionKeyOnfo(string symbol):this(symbol, 0m, null, 0m) {  }
     }
 
     public static class PositionHelpers
     {
+        /// <summary>
+        /// 還不知道是否可碎
+        /// </summary>
         public static PositionKeyOnfo GetIPositionKeyInfo(this IPosition position)
         {
             return new PositionKeyOnfo(
                 position.Symbol,
                 position.Quantity,
-                (decimal)position.AssetCurrentPrice,
-                (decimal)position.MarketValue
+                position.AssetCurrentPrice,
+                position.MarketValue
             );
         }
 
-        //IReadOnlyList<IPosition> positions = await client.ListPositionsAsync();
-        //IPosition symbolPosition = await client.GetPositionAsync(symbol);
     }
-
-
-    //public Position
 }

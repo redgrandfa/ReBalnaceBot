@@ -13,48 +13,48 @@ namespace AlpacaExample
 
         public static async Task Main()
         {
-            //IAlpacaTradingClient client = EnvClient.GetPaperClient();
-            var envClient = new EnvClient();
-            var client = envClient.Client;
-            var account = envClient.Account;
-            //account.Equity;
+            IAlpacaTradingClient client = EnvClient.GetPaperClient();
+            var account = await client.GetAccountAsync();
 
 
-            List<IAsset> a = new List<IAsset>();
-            //a.Add( await client.GetAssetAsync("VT") );
-            //a.Add( await client.GetAssetAsync("VTI") );
-            //a.Add( await client.GetAssetAsync("VXUS") );
+            //List<IAsset> assets = new List<IAsset>()
+            //{
+            //    await client.GetAssetAsync("VT") ,
+            //    await client.GetAssetAsync("VTI") ,
+            //    await client.GetAssetAsync("VXUS") ,
 
-            //a.Add( await client.GetAssetAsync("AVUV") );
+            //    await client.GetAssetAsync("AVUV") ,
 
-            //a.Add( await client.GetAssetAsync("DFSV") ); //Fractionable: False
-            //a.Add( await client.GetAssetAsync("VIOV") );
+            //    await client.GetAssetAsync("DFSV") , //Fractionable: False
+            //    await client.GetAssetAsync("VIOV") ,
 
-            //a.Add( await client.GetAssetAsync("QMOM") );
+            //    await client.GetAssetAsync("QMOM") ,
 
-            //a.Add( await client.GetAssetAsync("VFMF") );
-            //a.Add( await client.GetAssetAsync("AVGE") ); //Fractionable: False
+            //    await client.GetAssetAsync("VFMF") ,
+            //    await client.GetAssetAsync("AVGE") , //Fractionable: False
 
-            //a.Add( await client.GetAssetAsync("AVUV") );
-            a.Add( await client.GetAssetAsync("QVAL") );
-            a.Add( await client.GetAssetAsync("DEEP") ); //Fractionable: False
-            //a.Add( await client.GetAssetAsync("QMOM") );
-            a.Add( await client.GetAssetAsync("AVDV") );
-            a.Add( await client.GetAssetAsync("IVAL") );
-            a.Add( await client.GetAssetAsync("FRDM") );
-            a.Add( await client.GetAssetAsync("IMOM") ); //Fractionable: False
+            //    await client.GetAssetAsync("AVUV") ,
+            //    await client.GetAssetAsync("QVAL") ,
 
-            foreach (var asset in a)
-            {
-                Console.WriteLine($"{asset.Symbol} Status: {asset.Status}");
-                Console.WriteLine($"{asset.Symbol} IsTradable: {asset.IsTradable}");
-                Console.WriteLine($"{asset.Symbol} Fractionable: {asset.Fractionable}");
+            //    await client.GetAssetAsync("DEEP") , //Fractionable: False
+            //    await client.GetAssetAsync("QMOM") ,
+            //    await client.GetAssetAsync("AVDV") ,
+            //    await client.GetAssetAsync("IVAL") ,
+            //    await client.GetAssetAsync("FRDM") ,
+            //    await client.GetAssetAsync("IMOM") , //Fractionable: False
+            //};
 
-                //await client.PostOrderAsync(OrderSide.Buy.Market(
-                //    asset.Symbol,
-                //    OrderQuantity.Notional(100m)
-                //));
-            }
+            //foreach (var asset in assets)
+            //{
+            //    Console.WriteLine($"{asset.Symbol} Status: {asset.Status}");
+            //    Console.WriteLine($"{asset.Symbol} IsTradable: {asset.IsTradable}");
+            //    Console.WriteLine($"{asset.Symbol} Fractionable: {asset.Fractionable}");
+
+            //    //await client.PostOrderAsync(OrderSide.Buy.Market(
+            //    //    asset.Symbol,
+            //    //    OrderQuantity.Notional(100m)
+            //    //));
+            //}
 
 
 
@@ -62,17 +62,14 @@ namespace AlpacaExample
 
             //var order2 = await client.PostOrderAsync(OrderSide.Buy.Market(
             //    "AAPL",
-            //    1
+            //    0.001m
             //));
 
-            //var order3 = await client.PostOrderAsync(OrderSide.Buy.Market(
-            //    "AAPL",
-            //    OrderQuantity.Notional(1111m)
-            //));
+            //client.GetPositionAsync("AAPL");
 
 
-            //var a = new ReBalanceOperation(client, account);
-            //a.TryReBalanceAll();
+            var a = new ReBalanceOperation();
+            await a.TryReBalanceAll();
 
 
             Console.ReadLine();

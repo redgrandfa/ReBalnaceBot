@@ -15,7 +15,7 @@ builder.Services.AddSwaggerGen();
 
 
 //記得註冊 Invocable的實作
-builder.Services.AddTransient<TestInvocable>();
+builder.Services.AddTransient<ReBalanceInvocable>();
 builder.Services.AddScheduler();
 
 var app = builder.Build();
@@ -30,9 +30,6 @@ app.UseHttpsRedirection();
 
 app.Services.UseScheduler(scheduler =>
 {
-    //scheduler.Schedule<TestInvocable>()
-    //scheduler.ScheduleWithParams<BackupDatabaseTableInvocable>("[dbo].[Users]") //DI以外的引數
-
     //scheduler.Schedule(() =>
     //{
     //    int i = 0;
@@ -44,24 +41,19 @@ app.Services.UseScheduler(scheduler =>
     //.Zoned(TimeZoneInfo.Local)
     ;
 
-    scheduler.ScheduleAsync(async () =>
-    {
-        var envClient = new EnvClient();
-        var client = envClient.Client;
-        var account = envClient.Account;
+    //夏令：13:30~20:00 
+    //冬令：14:30~21:00
+    //=> 聯集  台灣晚上9點半~凌晨5點: UTC 13~21
+    //=> 希望訂單馬上成交: 交集: UTC 15~20
 
-        var a = new ReBalanceOperation(client, account);
-        await a.TryReBalanceAll();
-    })
-    //UTC+0  08:00 ~ 13:30 ~ 20:00
-    //.Cron("* 08-20 * * 1-5")
-    .Cron("* 13-20 * * 1-5")
+    //UTC+0  13:30 ~ 20:00
+
+    scheduler.Schedule<ReBalanceInvocable>()
+    .Cron("*/1 13-20 * * 1-5")
     //不能搭配 Weekday()
     ;
-
 }).OnError((exception) =>
 {
-    Console.WriteLine(exception.Message);
     Console.WriteLine(exception);
 });
 

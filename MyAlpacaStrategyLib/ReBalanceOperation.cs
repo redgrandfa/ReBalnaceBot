@@ -3,209 +3,160 @@ using MyAlpacaStrategyLib;
 
 namespace MyAlpacaStrategyLib
 {
-    public class AssetKeyInfo
-    {
-        public readonly string symbol;
-        public readonly decimal percent;
-        public readonly bool isFractionable;
-        public AssetKeyInfo(string symbol, decimal percent, bool isFractionable)
-        {
-            this.symbol = symbol;
-            this.percent = percent;
-            this.isFractionable = isFractionable;
-        }
-        public AssetKeyInfo(string symbol, decimal percent): this(symbol, percent , true)
-        {
-        }
-
-    }
     public class ReBalanceOperation
     {
-        //現況
-        private readonly IAlpacaTradingClient client;
-        private readonly IAccount account;
-        private readonly decimal additionalHypotheticalCash; //從DB取'額外未入假想金
-        private decimal CurrentCash => this.account.TradableCash + additionalHypotheticalCash;
-        // buypower
+        private static readonly IAlpacaTradingClient client;
+        private static readonly Dictionary<string, PlanItemKeyInfo> plan;
+        static ReBalanceOperation()
+        {
+            client = EnvClient.GetClient();
+            plan = new Dictionary<string, PlanItemKeyInfo> //100% 計畫   //TODO 必須先賣後買?  //buying power > equity
+            {
+                {"AVUV" ,  new PlanItemKeyInfo("AVUV" , 0.100m) },
+                {"QVAL" ,  new PlanItemKeyInfo("QVAL" , 0.115m) },
+                {"DEEP" ,  new PlanItemKeyInfo("DEEP" , 0.115m , false) },
+                {"QMOM" ,  new PlanItemKeyInfo("QMOM" , 0.220m) },
+                {"AVDV" ,  new PlanItemKeyInfo("AVDV" , 0.080m) },
+                {"IVAL" ,  new PlanItemKeyInfo("IVAL" , 0.095m) },
+                {"FRDM" ,  new PlanItemKeyInfo("FRDM" , 0.095m) },
+                {"IMOM" ,  new PlanItemKeyInfo("IMOM" , 0.180m  , false) }, 
+            };
+        }
 
-
-        //理想
-        private readonly Dictionary<string, AssetKeyInfo> plan;
+        private IAccount Account { get; set; }
 
         //private 完美賣出額
         //private 完美買入額
 
-        public ReBalanceOperation(IAlpacaTradingClient client , IAccount account) 
-            : this(client , account, 
-                 new Dictionary<string, AssetKeyInfo>
-                 {
-                    {nameof(CurrentCash) , new AssetKeyInfo(nameof(CurrentCash) ,0m , false) },
-                    {"AVUV" ,  new AssetKeyInfo("AVUV" , 0m) },
-                    {"QVAL" ,  new AssetKeyInfo("QVAL" , 0m) },
-                    {"DEEP" ,  new AssetKeyInfo("DEEP" , 0m , false) },
-                    {"QMOM" ,  new AssetKeyInfo("QMOM" , 0m) },
-                    {"AVDV" ,  new AssetKeyInfo("AVDV" , 0m) },
-                    {"IVAL" ,  new AssetKeyInfo("IVAL" , 0m) },
-                    {"FRDM" ,  new AssetKeyInfo("FRDM" , 0m) },
-                    {"IMOM" ,  new AssetKeyInfo("IMOM" , 0m , false) },
-                 }
-            )
+        public ReBalanceOperation() 
         {
         }
 
-        public ReBalanceOperation(IAlpacaTradingClient client, IAccount account, Dictionary<string, AssetKeyInfo> plan)
-        {
-            this.client = client;
-            this.account = account;
-
-            this.plan = plan;
-
-            additionalHypotheticalCash = 0;
-        }
 
         public async Task TryReBalanceAll() {
-            //刪所有 open中的訂單 
-            //await client.CancelAllOrdersAsync();
-            //所有部位物件
-            var allPositions = await client.ListPositionsAsync();
+            var cancelAllOrdersTask = client.CancelAllOrdersAsync();
+            var getAccountTask = client.GetAccountAsync();
+            var listPositionsTask = client.ListPositionsAsync();
+
+            await Task.WhenAll(getAccountTask, cancelAllOrdersTask, listPositionsTask);
+
+            Account = getAccountTask.Result;
+            var allPositions = listPositionsTask.Result;
+
+
 
             //每個 ReBalance項目，所需的部位資訊
-            var positionsToReBalance = new List<PositionKeyOnfo>(); 
-            //不再計劃書李 / 不在部位裡
-
-
-            //var 可取得市值的資產總市值 = CurrentCash ;
-
-            var 可取得市值的資產的總比例 = plan[nameof(CurrentCash)].percent;
+            var positionsToReBalance = new List<PositionKeyOnfo>();
+            //需要檢查再平衡的 =  計劃書 U 部位
 
 
             foreach (var position in allPositions)
             {
-                if ( position.MarketValue.HasValue) //什麼情況拿不到?
-                {
-                    positionsToReBalance.Add(position.GetIPositionKeyInfo());
+                positionsToReBalance.Add(position.GetIPositionKeyInfo());
+            }
 
-                    if (plan.ContainsKey(position.Symbol))
-                    {
-                        可取得市值的資產的總比例 += plan[position.Symbol].percent; 
-                    }
-                    else  //不在計劃書裡 / 被更新的計畫除名
-                    {
-                        可取得市值的資產的總比例 += 0;
-                    }
+            // 不在目前部位裡 / 被更新的計畫納入  必然為買
+            foreach (var planItem in plan)
+            {
+                var positionFind = positionsToReBalance.FirstOrDefault(p => p.symbol == planItem.Key);
+                if ( positionFind != null )
+                {
+                    positionFind.isFractionable = planItem.Value.isFractionable;
                 }
                 else
                 {
-                    Console.WriteLine($"{position.Symbol}無MarketValue");
+                    var p = new PositionKeyOnfo(planItem.Key);
+                    positionsToReBalance.Add( p ); //not yet know Fractionable
                 }
             }
-
-            // 不在目前部位裡 / 被更新的計畫納入
-
-
 
 
 
             foreach (var positionKeyInfo in positionsToReBalance) { 
                 //TODO 是否有必要檢查部位可交易
-                bool isAvalible = await client.CheckSymbolTrable(positionKeyInfo.symbol);
-                //if (!isAvalible) {
-                //    continue;
-                //}
-                if (isAvalible) {
-                    await ReBalancePosition(positionKeyInfo, 可取得市值的資產總市值 , 可取得市值的資產的總比例);
-                    Console.WriteLine($"ReBalancePosition {positionKeyInfo.symbol} done");
+                bool isTradable = await client.CheckSymbolTradable(positionKeyInfo.symbol);
+
+                if (isTradable) {
+                    var idealMarketValue = 0m;
+                    if ( plan.ContainsKey(positionKeyInfo.symbol) )
+                        idealMarketValue = Account.Equity.Value * plan[positionKeyInfo.symbol].percent;
+
+                    await ReBalancePosition(positionKeyInfo, idealMarketValue );
                 }
                 else
                 {
-                    Console.WriteLine($"{positionKeyInfo.symbol}無MarketValue");
+                    Console.WriteLine($"{positionKeyInfo.symbol} 不可交易");
                 }
             }
         }
 
-        //可取得市值的資產們 的總市值?
-        public async Task ReBalancePosition(PositionKeyOnfo positionKeyInfo, decimal 可取得市值的資產總市值 , decimal 可取得市值的資產的總比例)
+        public static async Task ReBalancePosition(PositionKeyOnfo positionKeyInfo , decimal idealMarketValue )
         {
-            string symbol = positionKeyInfo.symbol ;
-            decimal qty = positionKeyInfo.qty ;
-            decimal unitPrice = positionKeyInfo.unitPrice.Value; // 一定有市值 才會被ADD進LIST
-            decimal marketValue = positionKeyInfo.marketValue.Value; // 一定有市值 才會被ADD進LIST
-
-
-            var 理應marketValue = 可取得市值的資產總市值 * plan[symbol].percent / 可取得市值的資產的總比例;
-
-            // 理應加減碼
-            var diffMarketValue = 理應marketValue - marketValue;
-
-            if (diffMarketValue == 0m)
-            {
+            decimal? marketValue = positionKeyInfo.marketValue;
+            if (marketValue == null) {
+                Console.WriteLine("有倉，取不到市值");
                 return;
             }
+            decimal diffMarketValue = idealMarketValue - (decimal)marketValue;
+
 
             OrderSide side = OrderSide.Buy;
             OrderQuantity orderQuantity;
 
-            //Func<decimal, decimal> sign = (x) => x;
-
             if (diffMarketValue < 0m)
             {
                 side = OrderSide.Sell;
-                //sign = (x) => -x;
             }
 
-            if (positionKeyInfo.isFractionable) // 以錢下單， 一元為最小單位，自動拆
+            string symbol = positionKeyInfo.symbol;
+
+            bool isFractionable = positionKeyInfo.isFractionable ?? (await client.GetAssetAsync(symbol)).Fractionable;
+            //"Notional"是金融術語，指的是某個金融衍生品（例如期貨合約、選擇權合約等）的標的資產的價值，而不是實際投入的資金數額
+            if (isFractionable) // 以錢下單， 一元為最小單位，自動拆
             {
-                //美元最小單位  小數兩位?
-                var 下單錢 = Math.Round(diffMarketValue, 2, MidpointRounding.ToPositiveInfinity);  //多買 少賣
-
-                orderQuantity = OrderQuantity.Notional(Math.Abs(下單錢));
+                //limit price increment must be > 0.1
+                //RestClientErrorException: notional amount must be >= 1.00
+                //多買 少賣
+                //var diffNotion = Math.Round(diffMarketValue, 1, MidpointRounding.ToPositiveInfinity);  
+                var diffNotion = Math.Ceiling(diffMarketValue);  
+                orderQuantity = OrderQuantity.Notional(Math.Abs(diffNotion));
             }
-            else // 整數量
+            else // 股票須整數量
             {
-                var 下單量 = Math.Ceiling(diffMarketValue / unitPrice);
-                orderQuantity = OrderQuantity.FromInt64(Math.Abs((long)下單量));
+                //無單價 需取得市場現價，乾脆先買一單位  
+                //decimal unitPrice = positionKeyInfo.unitPrice ?? diffMarketValue; 
+                if (positionKeyInfo.unitPrice.HasValue)
+                {
+                    decimal unitPrice = positionKeyInfo.unitPrice.Value; 
+                    var diffQty = Math.Ceiling(diffMarketValue / unitPrice);
+                    orderQuantity = OrderQuantity.FromInt64(Math.Abs((long)diffQty));
+                }
+                else
+                {
+                    orderQuantity = OrderQuantity.FromInt64(1L);
+                }
             }
 
+            if (orderQuantity.Value <= 0) {
+                Console.WriteLine($"{symbol}: balance");
+                return;
+            }
 
             try
             {
+                string unitText = orderQuantity.IsInDollars ? "dollars" : "shares";
+                Console.WriteLine($"\t{symbol}: Try {side.ToString()} {orderQuantity.Value} {unitText}");
                 await client.PostOrderAsync(side.Market(
                     symbol,
                     orderQuantity
                 ));
+
+                Console.WriteLine($"\t\tdone");
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                Console.WriteLine(ex.Message);
             }
-
-            //var dict = new Dictionary<(OrderSide side, bool isFractionable), Action >()
-            //{
-            //    { 
-            //        (OrderSide.Buy , true),
-            //        ()=>{
-            //            var 下單錢 = Math.Round(diffMarketValue, 2, MidpointRounding.ToPositiveInfinity);  //多買 少賣
-
-            //            orderQuantityArg = 下單錢;
-            //            if()
-
-            //            orderQuantity = OrderQuantity.Notional(Math.Abs(下單錢));
-            //        }
-            //    },
-            //    { 
-            //        (OrderSide.Sell , true),
-            //        ()=>{}
-            //    },
-            //    { 
-            //        (OrderSide.Buy , true),
-            //        ()=>{}
-            //    },
-            //    { 
-            //        (OrderSide.Sell , true),
-            //        ()=>{}
-            //    },
-            //};
-
         }
     }
 }

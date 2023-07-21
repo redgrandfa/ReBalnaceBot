@@ -9,8 +9,14 @@ namespace MyAlpacaStrategyLib
 {
     public class EnvClient
     {
-        private const String KEY_ID = "PK8IZKEPBUY7KKLCFPFM";
-        private const String SECRET_KEY = "u3JLg1v8pgNu6VXa6clnIyfjRugh25qSma61diz0";
+        private const String KEY_ID = "PKJKRDUCZFXTYP4PZNHG";
+        private const String SECRET_KEY = "ThXy991piqh2GaC3mfkXKMgXOy3NRkULrKRLdVeE";
+
+        internal static IAlpacaTradingClient GetClient()
+        {
+            return GetPaperClient();
+        }
+
         public static IAlpacaTradingClient GetPaperClient()
         {
             return Environments.Paper
@@ -25,25 +31,15 @@ namespace MyAlpacaStrategyLib
         }
         //============================================
 
-        public IAlpacaTradingClient Client { get; }
-        public IAccount Account { get; }
-        public EnvClient()
-        {
-            Client = GetPaperClient() ;
-            //Client = GetLiveClient() ;
-            Account = Client.GetAccountAsync().GetAwaiter().GetResult();
-        }
-
         public async Task Test()
         {
+            //Client.GetAccountAsync()
             //client.CancelAllOrdersAsync();
             //client.CancelOrderAsync(new Guid());
 
             //client.DeleteAllPositionsAsync();
 
             //client.PatchOrderAsync
-
-
         }
     }
 }
