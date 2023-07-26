@@ -47,37 +47,26 @@ namespace MyAlpacaStrategyLib
 
     public static class OrderHelpers
     {
-
-        public static async Task<IOrder?> PlaceMarketBuyOrder(this IAlpacaTradingClient client , String symbol , Int64 quantity)
-        {
-            var order = await client.PostOrderAsync(OrderSide.Buy.Market(symbol, quantity));
-
-            Console.WriteLine(order);
-            return order;
-            //invalid crypto time_in_force
-        }
-
-        //限價買入 IOC? 五分鐘?
-        public static async Task<IOrder?> PlaceLimitedBuyOrder(this IAlpacaTradingClient client, String symbol, Int64 quantity)
-        {
-            var order = await client.PostOrderAsync(OrderSide.Buy.Market(symbol, quantity));
-
-            Console.WriteLine(order);
-            return order;
-        }
-
-        //限價賣出 IOC? 五分鐘?
-        public static async Task<IOrder?> PlaceLimitedSellOrder(this IAlpacaTradingClient client, String symbol, Int64 quantity)
-        {
-            var order = await client.PostOrderAsync(OrderSide.Sell.Market(symbol, quantity));
-
-            Console.WriteLine(order);
+        //await client.PostOrderAsync(OrderSide.Buy.Market(
+        //    "AAPL",
+        //    OrderQuantity.Fractional(1.0000001m) //實際就是下定 1單位
+        //));
+        //await client.PostOrderAsync(OrderSide.Buy.Market(
+        //    "AAPL",
+        //    //OrderQuantity.Notional(1.01m) //ok
+        //    //OrderQuantity.Notional(1.001m)  //can't
+        //));
 
 
-            //需要判斷是否 超持有量
+        //await client.PostOrderAsync(side.Limit(
+        //    symbol,
+        //    orderQuantity,
+        //    unitPrice
+        //));
+        //side.Stop
+        //side.StopLimit
+        //side.TrailingStop
 
-            return order;
-        }
 
         //order = await client.PostOrderAsync(
         //        LimitOrder.Sell("AMD", 1, 20.50M).WithDuration(TimeInForce.Opg));

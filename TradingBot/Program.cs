@@ -15,7 +15,8 @@ builder.Services.AddSwaggerGen();
 
 
 //記得註冊 Invocable的實作
-builder.Services.AddTransient<ReBalanceInvocable>();
+builder.Services.AddTransient<ReBalanceDayStartInvocable>();
+builder.Services.AddTransient<ReBalanceDayRepeatInvocable>();
 builder.Services.AddScheduler();
 
 var app = builder.Build();
@@ -30,12 +31,17 @@ app.UseHttpsRedirection();
 
 app.Services.UseScheduler(scheduler =>
 {
-    //scheduler.Schedule(() =>
+    //var exec = () =>
     //{
     //    int i = 0;
     //    Console.WriteLine($"{i++} : {DateTime.UtcNow}");
-    //})
-    //.Cron("* 13-20 * * 1-5")
+    //};
+
+    //scheduler.Schedule(exec).Cron("30-59 13 * * 1-5");
+    //scheduler.Schedule(exec).Cron("* 14-20 * * 1-5");
+
+    //scheduler.Schedule(exec)
+    //.Cron("30/1 13-20 * * 1-5")
     //.Weekday()
     //.RunOnceAtStart()
     //.Zoned(TimeZoneInfo.Local)
@@ -43,15 +49,16 @@ app.Services.UseScheduler(scheduler =>
 
     //夏令：13:30~20:00 
     //冬令：14:30~21:00
-    //=> 聯集  台灣晚上9點半~凌晨5點: UTC 13~21
-    //=> 希望訂單馬上成交: 交集: UTC 15~20
+    //=> 聯集  台灣晚上 9點半~凌晨5點: UTC 13~21
+    //=> 交集: 台灣晚上10點半~凌晨4點: UTC 15~20
 
     //UTC+0  13:30 ~ 20:00
 
-    scheduler.Schedule<ReBalanceInvocable>()
-    .Cron("*/1 13-20 * * 1-5")
-    //不能搭配 Weekday()
-    ;
+    //25K 以上不受day trade影響
+    scheduler.Schedule<ReBalanceDayStartInvocable>().Cron("56 13 * * 1-5");
+    //scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("54-59 13 * * 1-5");
+    scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("* 14-20 * * 1-5");
+    //scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("0 14-20 * * 1-5").RunOnceAtStart();
 }).OnError((exception) =>
 {
     Console.WriteLine(exception);
@@ -59,10 +66,10 @@ app.Services.UseScheduler(scheduler =>
 
 
 
-//app.MapGet("/weatherforecast", () =>
-//{
-//    return 1;
-//})
-//.WithName("GetWeatherForecast");
+app.MapGet("/x", () =>
+{
+    return 1;
+})
+.WithName("X");
 
 app.Run();

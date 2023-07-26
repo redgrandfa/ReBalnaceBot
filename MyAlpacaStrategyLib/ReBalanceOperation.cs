@@ -5,12 +5,18 @@ namespace MyAlpacaStrategyLib
 {
     public class ReBalanceOperation
     {
+        private static decimal SingleOrderAmountLowerBound = -218.34m; //218.34061135
+        //private decimal 完美買入額
         private static readonly IAlpacaTradingClient client;
+
         private static readonly Dictionary<string, PlanItemKeyInfo> plan;
+        //當天 一商品可以一直做同一方向，但不可兩向
+        private static Dictionary<string, OrderSide?> todayPositionSides;
+
         static ReBalanceOperation()
         {
             client = EnvClient.GetClient();
-            plan = new Dictionary<string, PlanItemKeyInfo> //100% 計畫   //TODO 必須先賣後買?  //buying power > equity
+            plan = new() //100% 計畫   //buying power不足的情境下 必須先賣後買?
             {
                 {"AVUV" ,  new PlanItemKeyInfo("AVUV" , 0.100m) },
                 {"QVAL" ,  new PlanItemKeyInfo("QVAL" , 0.115m) },
@@ -19,26 +25,63 @@ namespace MyAlpacaStrategyLib
                 {"AVDV" ,  new PlanItemKeyInfo("AVDV" , 0.080m) },
                 {"IVAL" ,  new PlanItemKeyInfo("IVAL" , 0.095m) },
                 {"FRDM" ,  new PlanItemKeyInfo("FRDM" , 0.095m) },
-                {"IMOM" ,  new PlanItemKeyInfo("IMOM" , 0.180m  , false) }, 
+                {"IMOM" ,  new PlanItemKeyInfo("IMOM" , 0.180m , false) }, 
+            };
+
+            todayPositionSides = new()
+            {
+                {"AVUV" ,  null },//OderSide.Buy },
+                {"QVAL" ,  null },//OderSide.Buy },
+                {"DEEP" ,  null },//OderSide.Buy },
+                {"QMOM" ,  null },//OderSide.Buy },
+                {"AVDV" ,  null },//OderSide.Buy },
+                {"IVAL" ,  null },//OderSide.Buy },
+                {"FRDM" ,  null },//OderSide.Buy },
+                {"IMOM" ,  null },//OrderSide.Buy },
             };
         }
 
-        private IAccount Account { get; set; }
-
-        //private 完美賣出額
-        //private 完美買入額
-
-        public ReBalanceOperation() 
+        public static void ResetTodayPositionSides()
         {
+            foreach (var positionSide in todayPositionSides)
+            {
+                //positionSidePair.Value = null;
+                todayPositionSides[positionSide.Key] = null;
+            }
         }
 
 
+
+        private IAccount Account { get; set; }
+        public ReBalanceOperation() 
+        { }
+
+        public static async Task ExecOnce()
+        {
+            try
+            {
+                var op = new ReBalanceOperation();
+                await op.TryReBalanceAll();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"TryReBalanceAll EXCEPTION: \n{ex}");
+            }
+            Console.WriteLine("========================");
+        }
+
+        /// <summary>
+        /// 全部限價單平衡一輪，不一定會成交
+        /// </summary>
         public async Task TryReBalanceAll() {
             var cancelAllOrdersTask = client.CancelAllOrdersAsync();
             var getAccountTask = client.GetAccountAsync();
             var listPositionsTask = client.ListPositionsAsync();
 
-            await Task.WhenAll(getAccountTask, cancelAllOrdersTask, listPositionsTask);
+            await Task.WhenAll(
+                cancelAllOrdersTask,
+                getAccountTask, 
+                listPositionsTask);
 
             Account = getAccountTask.Result;
             var allPositions = listPositionsTask.Result;
@@ -56,16 +99,20 @@ namespace MyAlpacaStrategyLib
             }
 
             // 不在目前部位裡 / 被更新的計畫納入  必然為買
-            foreach (var planItem in plan)
+            //foreach (var planItem in plan)
+            foreach (var positionSide in todayPositionSides)
             {
-                var positionFind = positionsToReBalance.FirstOrDefault(p => p.symbol == planItem.Key);
+                var symbol = positionSide.Key;
+                var planItem = plan[symbol];
+
+                var positionFind = positionsToReBalance.FirstOrDefault(p => p.symbol == symbol);
                 if ( positionFind != null )
                 {
-                    positionFind.isFractionable = planItem.Value.isFractionable;
+                    positionFind.isFractionable = planItem.isFractionable;
                 }
                 else
                 {
-                    var p = new PositionKeyOnfo(planItem.Key);
+                    var p = new PositionKeyOnfo(symbol);
                     positionsToReBalance.Add( p ); //not yet know Fractionable
                 }
             }
@@ -81,7 +128,7 @@ namespace MyAlpacaStrategyLib
                     if ( plan.ContainsKey(positionKeyInfo.symbol) )
                         idealMarketValue = Account.Equity.Value * plan[positionKeyInfo.symbol].percent;
 
-                    await ReBalancePosition(positionKeyInfo, idealMarketValue );
+                    await ReBalanceAPosition(positionKeyInfo, idealMarketValue );
                 }
                 else
                 {
@@ -90,8 +137,10 @@ namespace MyAlpacaStrategyLib
             }
         }
 
-        public static async Task ReBalancePosition(PositionKeyOnfo positionKeyInfo , decimal idealMarketValue )
+        public static async Task ReBalanceAPosition(PositionKeyOnfo positionKeyInfo , decimal idealMarketValue )
         {
+            string symbol = positionKeyInfo.symbol;
+
             decimal? marketValue = positionKeyInfo.marketValue;
             if (marketValue == null) {
                 Console.WriteLine("有倉，取不到市值");
@@ -99,59 +148,125 @@ namespace MyAlpacaStrategyLib
             }
             decimal diffMarketValue = idealMarketValue - (decimal)marketValue;
 
-
-            OrderSide side = OrderSide.Buy;
-            OrderQuantity orderQuantity;
-
-            if (diffMarketValue < 0m)
+            // 不符合 此部位 今天能做的方向
+            if (diffMarketValue == 0 
+                || (diffMarketValue > 0 && todayPositionSides[symbol] == OrderSide.Sell)
+                || (diffMarketValue < 0 && todayPositionSides[symbol] == OrderSide.Buy)
+            ) 
             {
-                side = OrderSide.Sell;
-            }
-
-            string symbol = positionKeyInfo.symbol;
-
-            bool isFractionable = positionKeyInfo.isFractionable ?? (await client.GetAssetAsync(symbol)).Fractionable;
-            //"Notional"是金融術語，指的是某個金融衍生品（例如期貨合約、選擇權合約等）的標的資產的價值，而不是實際投入的資金數額
-            if (isFractionable) // 以錢下單， 一元為最小單位，自動拆
-            {
-                //limit price increment must be > 0.1
-                //RestClientErrorException: notional amount must be >= 1.00
-                //多買 少賣
-                //var diffNotion = Math.Round(diffMarketValue, 1, MidpointRounding.ToPositiveInfinity);  
-                var diffNotion = Math.Ceiling(diffMarketValue);  
-                orderQuantity = OrderQuantity.Notional(Math.Abs(diffNotion));
-            }
-            else // 股票須整數量
-            {
-                //無單價 需取得市場現價，乾脆先買一單位  
-                //decimal unitPrice = positionKeyInfo.unitPrice ?? diffMarketValue; 
-                if (positionKeyInfo.unitPrice.HasValue)
-                {
-                    decimal unitPrice = positionKeyInfo.unitPrice.Value; 
-                    var diffQty = Math.Ceiling(diffMarketValue / unitPrice);
-                    orderQuantity = OrderQuantity.FromInt64(Math.Abs((long)diffQty));
-                }
-                else
-                {
-                    orderQuantity = OrderQuantity.FromInt64(1L);
-                }
-            }
-
-            if (orderQuantity.Value <= 0) {
-                Console.WriteLine($"{symbol}: balance");
+                Console.WriteLine("not today direction");
                 return;
             }
 
+            //bool isFractionable = positionKeyInfo.isFractionable ?? (await client.GetAssetAsync(symbol)).Fractionable;
+            //"Notional"是金融術語，指的是某個金融衍生品（例如期貨合約、選擇權合約等）的標的資產的價值，而不是實際投入的資金數額
+            //if (isFractionable) // 以錢下單， 一元為最小單位，自動拆
+            //{
+            //    //Both notional and qty fields can take up to 9 decimal point values => 以單價算出數量 ，進位到7位小數?
+            //    //Day trading fractional shares counts towards your day trade count
+            //    //can only be bought or sold with market orders during normal market hours
+
+            //    //買多 賣少
+            //    //limit price increment must be > 0.1
+            //    var diffNotion = Math.Round(diffMarketValue, 1, MidpointRounding.ToPositiveInfinity);
+
+            //    //RestClientErrorException: notional amount must be >= 1.00
+            //    //var diffNotion = Math.Ceiling(diffMarketValue);
+
+
+            //    diffNotion = Math.Abs(diffNotion);
+            //    if( diffNotion < 1.00m && diffNotion > 0m )
+            //    {
+            //        diffNotion = 1.00m;
+            //    }
+
+            //    orderQuantity = OrderQuantity.Notional(diffNotion);
+            //}
+            //else // 股票須整數量
+            //{
+
+            decimal unitPrice = 0m; //下單單價
+            decimal diffQty = 0m; 
+
+            if ( positionKeyInfo.unitPrice.HasValue )
+            {
+                unitPrice = positionKeyInfo.unitPrice.Value;
+            }
+            else
+            //無單價 需取得市場現價，乾脆只先買一單位  
+            {
+                var p = (await client.PostOrderAsync(OrderSide.Buy.Market(symbol, 1L)) ).AverageFillPrice;
+                while (p.HasValue)
+                {
+                    unitPrice = p.Value; 
+                }
+                diffQty -= 1m;
+            }
+
+            //單價必須兩位小數
+            if(diffMarketValue >= 0) //買 單價要+
+            {
+                unitPrice = Math.Round(unitPrice
+                    , 2, MidpointRounding.ToPositiveInfinity);
+            }
+            else //賣 單價要-
+            {
+                unitPrice = Math.Round(unitPrice
+                    , 2, MidpointRounding.ToNegativeInfinity);
+            }
+
+            diffQty += Math.Ceiling(diffMarketValue / unitPrice);
+
+            //}
             try
             {
-                string unitText = orderQuantity.IsInDollars ? "dollars" : "shares";
-                Console.WriteLine($"\t{symbol}: Try {side.ToString()} {orderQuantity.Value} {unitText}");
-                await client.PostOrderAsync(side.Market(
-                    symbol,
-                    orderQuantity
-                ));
+                Console.WriteLine($"{symbol} Orders:");
 
-                Console.WriteLine($"\t\tdone");
+                if(diffQty > 0)
+                {
+                    var side = OrderSide.Buy;
+                    long q = (long)diffQty;
+                    await client.PostOrderAsync(side.Limit(
+                        symbol,
+                        q,
+                        unitPrice
+                    ));
+                    if (todayPositionSides[symbol] == null)
+                    {
+                        todayPositionSides[symbol] = side;
+                    }
+                    
+                    Console.WriteLine($"\t post order - buy {q} shares , price = {unitPrice}");
+                }
+                else if(diffQty < 0)
+                {
+                    var side = OrderSide.Sell;
+                    decimal singleOrderQty_lowerBound = Math.Ceiling(SingleOrderAmountLowerBound / unitPrice);
+
+                    while (diffQty < 0m)
+                    {
+                        var tempQ = diffQty;
+                        if(diffQty < singleOrderQty_lowerBound) //若 會超賣
+                        {
+                            tempQ = singleOrderQty_lowerBound;
+                        }
+                        long q = -(long)tempQ;
+
+                        await client.PostOrderAsync(side.Limit(
+                            symbol,
+                            q,
+                            unitPrice
+                        ));
+
+                        diffQty -= singleOrderQty_lowerBound;
+                        Console.WriteLine($"\t post order - sell {q} shares , price = {unitPrice}");
+                    }
+
+                    if (todayPositionSides[symbol] == null)
+                    {
+                        todayPositionSides[symbol] = side;
+                    }
+                }
             }
             catch (Exception ex)
             {

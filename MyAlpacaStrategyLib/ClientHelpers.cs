@@ -9,8 +9,8 @@ namespace MyAlpacaStrategyLib
 {
     public class EnvClient
     {
-        private const String KEY_ID = "PKJKRDUCZFXTYP4PZNHG";
-        private const String SECRET_KEY = "ThXy991piqh2GaC3mfkXKMgXOy3NRkULrKRLdVeE";
+        private const string KEY_ID = "PKULL0A9EEBUV39VEH9Q";
+        private const string SECRET_KEY = "3QWqxPupX7T5qcebZGpZEKBEnWRyBDogj8YQA3CK";
 
         internal static IAlpacaTradingClient GetClient()
         {
@@ -30,16 +30,5 @@ namespace MyAlpacaStrategyLib
                 .GetAlpacaTradingClient(new SecretKey(KEY_ID, SECRET_KEY));
         }
         //============================================
-
-        public async Task Test()
-        {
-            //Client.GetAccountAsync()
-            //client.CancelAllOrdersAsync();
-            //client.CancelOrderAsync(new Guid());
-
-            //client.DeleteAllPositionsAsync();
-
-            //client.PatchOrderAsync
-        }
     }
 }

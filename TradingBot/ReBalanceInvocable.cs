@@ -3,13 +3,19 @@ using MyAlpacaStrategyLib;
 
 namespace TradingBot
 {
-    public class ReBalanceInvocable : IInvocable
+    public class ReBalanceDayStartInvocable : IInvocable
     {
         public async Task Invoke()
         {
-            var a = new ReBalanceOperation();
-            await a.TryReBalanceAll();
-            Console.WriteLine("========================");
+            ReBalanceOperation.ResetTodayPositionSides();
+            await ReBalanceOperation.ExecOnce();
+        }
+    }
+    public class ReBalanceDayRepeatInvocable : IInvocable
+    {
+        public async Task Invoke()
+        {
+            await ReBalanceOperation.ExecOnce();
         }
     }
 }
