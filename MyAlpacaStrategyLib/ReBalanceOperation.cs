@@ -41,6 +41,7 @@ namespace MyAlpacaStrategyLib
             };
         }
 
+        //App 必須在當日第一次成交前部署， 不然會 成交過的Side 會被重置
         public static void ResetTodayPositionSides()
         {
             foreach (var positionSide in todayPositionSides)
@@ -140,6 +141,7 @@ namespace MyAlpacaStrategyLib
         public static async Task ReBalanceAPosition(PositionKeyOnfo positionKeyInfo , decimal idealMarketValue )
         {
             string symbol = positionKeyInfo.symbol;
+            Console.WriteLine($"{symbol} Orders:");
 
             decimal? marketValue = positionKeyInfo.marketValue;
             if (marketValue == null) {
@@ -220,8 +222,6 @@ namespace MyAlpacaStrategyLib
             //}
             try
             {
-                Console.WriteLine($"{symbol} Orders:");
-
                 if(diffQty > 0)
                 {
                     var side = OrderSide.Buy;

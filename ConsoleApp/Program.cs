@@ -14,63 +14,73 @@ namespace AlpacaExample
         public static async Task Main()
         {
             IAlpacaTradingClient client = EnvClient.GetPaperClient();
+
+
+
             var account = await client.GetAccountAsync();
+            List<IAsset> assets = new List<IAsset>()
+            {
+                //await client.GetAssetAsync("VT") ,
+                //await client.GetAssetAsync("VTI") ,
+                //await client.GetAssetAsync("VXUS") ,
+
+                //await client.GetAssetAsync("AVUV") ,
+
+                //await client.GetAssetAsync("DFSV") , //Fractionable: False
+                //await client.GetAssetAsync("VIOV") ,
+
+                //await client.GetAssetAsync("QMOM") ,
+
+                //await client.GetAssetAsync("VFMF") ,
+                //await client.GetAssetAsync("AVGE") , //Fractionable: False
+
+                await client.GetAssetAsync("AVUV") ,
+                await client.GetAssetAsync("QVAL") ,
+                await client.GetAssetAsync("DEEP") , //Fractionable: False
+                await client.GetAssetAsync("QMOM") ,
+                await client.GetAssetAsync("AVDV") ,
+                await client.GetAssetAsync("IVAL") ,
+                await client.GetAssetAsync("FRDM") ,
+                await client.GetAssetAsync("IMOM") , //Fractionable: False
+            };
+
+            foreach (var asset in assets)
+            {
+                //Console.WriteLine($"{asset.Symbol} Status: {asset.Status}");
+                //Console.WriteLine($"{asset.Symbol} IsTradable: {asset.IsTradable}");
+                //Console.WriteLine($"{asset.Symbol} Fractionable: {asset.Fractionable}");
+                await client.PostOrderAsync(OrderSide.Buy.Market(
+                    asset.Symbol,
+                    1L
+                ));
+            }
 
 
-            //List<IAsset> assets = new List<IAsset>()
-            //{
-            //    await client.GetAssetAsync("VT") ,
-            //    await client.GetAssetAsync("VTI") ,
-            //    await client.GetAssetAsync("VXUS") ,
+            // OK
 
-            //    await client.GetAssetAsync("AVUV") ,
+            //var c = await client.ListOrdersAsync();
 
-            //    await client.GetAssetAsync("DFSV") , //Fractionable: False
-            //    await client.GetAssetAsync("VIOV") ,
-
-            //    await client.GetAssetAsync("QMOM") ,
-
-            //    await client.GetAssetAsync("VFMF") ,
-            //    await client.GetAssetAsync("AVGE") , //Fractionable: False
-
-            //    await client.GetAssetAsync("AVUV") ,
-            //    await client.GetAssetAsync("QVAL") ,
-
-            //    await client.GetAssetAsync("DEEP") , //Fractionable: False
-            //    await client.GetAssetAsync("QMOM") ,
-            //    await client.GetAssetAsync("AVDV") ,
-            //    await client.GetAssetAsync("IVAL") ,
-            //    await client.GetAssetAsync("FRDM") ,
-            //    await client.GetAssetAsync("IMOM") , //Fractionable: False
-            //};
-
-            //foreach (var asset in assets)
-            //{
-            //    Console.WriteLine($"{asset.Symbol} Status: {asset.Status}");
-            //    Console.WriteLine($"{asset.Symbol} IsTradable: {asset.IsTradable}");
-            //    Console.WriteLine($"{asset.Symbol} Fractionable: {asset.Fractionable}");
-
-            //    //await client.PostOrderAsync(OrderSide.Buy.Market(
-            //    //    asset.Symbol,
-            //    //    OrderQuantity.Notional(100m)
-            //    //));
-            //}
+            //var a = new ReBalanceOperation();
+            //await a.TryReBalanceAll();
 
 
+            //Client.GetAccountAsync()
+            //client.CancelAllOrdersAsync();
+            //client.CancelOrderAsync(new Guid());
 
-            //await client.CancelAllOrdersAsync();
+            //client.DeleteAllPositionsAsync();
 
-            //var order2 = await client.PostOrderAsync(OrderSide.Buy.Market(
-            //    "AAPL",
-            //    0.001m
+            //client.PatchOrderAsync()
+            //var id = (await client.PostOrderAsync(OrderSide.Buy.Market(
+            //    "q",
+            //    1L
+            //))).OrderId;
+
+            //await client.PostOrderAsync(OrderSide.Buy.Limit(
+            //    "DEEP",
+            //    1L,
+            //    35.5m
             //));
-
-            //client.GetPositionAsync("AAPL");
-
-
-            var a = new ReBalanceOperation();
-            await a.TryReBalanceAll();
-
 
             Console.ReadLine();
         }
