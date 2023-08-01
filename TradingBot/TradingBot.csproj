@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="coravel" Version="4.2.1" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="6.0.20" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
   </ItemGroup>
 

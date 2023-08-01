@@ -5,17 +5,23 @@ namespace TradingBot
 {
     public class ReBalanceDayStartInvocable : IInvocable
     {
+        public ReBalanceDayStartInvocable(){ }
         public async Task Invoke()
         {
             ReBalanceOperation.ResetTodayPositionSides();
-            await ReBalanceOperation.ExecOnce();
         }
     }
     public class ReBalanceDayRepeatInvocable : IInvocable
     {
+        private readonly ReBalanceOperation _op;
+        public ReBalanceDayRepeatInvocable( ReBalanceOperation op)
+        {
+            _op = op;
+        }
+
         public async Task Invoke()
         {
-            await ReBalanceOperation.ExecOnce();
+            await _op.ExecOnce();
         }
     }
 }

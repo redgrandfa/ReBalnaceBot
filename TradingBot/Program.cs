@@ -4,6 +4,8 @@ using MyAlpacaStrategyLib;
 using TradingBot;
 
 var builder = WebApplication.CreateBuilder(args);
+var services = builder.Services;
+IConfiguration config = builder.Configuration;
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -11,13 +13,17 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 
-//builder.Services.AddSingleton<IAlpacaTradingClient, >();
+services.AddStackExchangeRedisCache(options =>
+    options.Configuration = config["RedisConfig:reid12"]
+);
+services.AddSingleton<IMemoryCacheRepository, MemoryCacheRepository>();
+services.AddSingleton<Logger>();
+services.AddTransient<ReBalanceOperation>();
 
+services.AddScheduler();
+services.AddTransient<ReBalanceDayStartInvocable>();
+services.AddTransient<ReBalanceDayRepeatInvocable>();
 
-//記得註冊 Invocable的實作
-builder.Services.AddTransient<ReBalanceDayStartInvocable>();
-builder.Services.AddTransient<ReBalanceDayRepeatInvocable>();
-builder.Services.AddScheduler();
 
 var app = builder.Build();
 
@@ -31,22 +37,6 @@ app.UseHttpsRedirection();
 
 app.Services.UseScheduler(scheduler =>
 {
-    //var exec = () =>
-    //{
-    //    int i = 0;
-    //    Console.WriteLine($"{i++} : {DateTime.UtcNow}");
-    //};
-
-    //scheduler.Schedule(exec).Cron("30-59 13 * * 1-5");
-    //scheduler.Schedule(exec).Cron("* 14-20 * * 1-5");
-
-    //scheduler.Schedule(exec)
-    //.Cron("30/1 13-20 * * 1-5")
-    //.Weekday()
-    //.RunOnceAtStart()
-    //.Zoned(TimeZoneInfo.Local)
-    ;
-
     //夏令：13:30~20:00 
     //冬令：14:30~21:00
     //=> 聯集  台灣晚上 9點半~凌晨5點: UTC 13~21
@@ -55,10 +45,14 @@ app.Services.UseScheduler(scheduler =>
     //UTC+0  13:30 ~ 20:00
 
     //25K 以上不受day trade影響
-    scheduler.Schedule<ReBalanceDayStartInvocable>().Cron("56 13 * * 1-5");
-    //scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("54-59 13 * * 1-5");
-    scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("* 14-20 * * 1-5");
-    //scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("0 14-20 * * 1-5").RunOnceAtStart();
+    //scheduler.Schedule<ReBalanceDayStartInvocable>().Cron("* * * * *");
+
+    scheduler.Schedule<ReBalanceDayStartInvocable>().Cron("53 13 * * 1-5")
+    .RunOnceAtStart()
+    ;
+    scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("54-59 13 * * 1-5");
+    scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("* 14-18 * * 1-5");
+    scheduler.Schedule<ReBalanceDayRepeatInvocable>().Cron("1-41 19 * * 1-5") ;
 }).OnError((exception) =>
 {
     Console.WriteLine(exception);
