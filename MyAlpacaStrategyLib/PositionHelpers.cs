@@ -17,7 +17,7 @@ namespace MyAlpacaStrategyLib
     /// 無倉 => 市值 0m，單價null
     /// 有倉 => 市值 decimal? ，單價decimal?
     /// </summary>
-    public class PositionKeyOnfo
+    public class PositionKeyInfo
     {
         public readonly string symbol;
         public readonly decimal qty;
@@ -25,7 +25,7 @@ namespace MyAlpacaStrategyLib
         public readonly decimal? marketValue;
         public bool? isFractionable = null;
 
-        public PositionKeyOnfo(string symbol, decimal qty, decimal? unitPrice, decimal? marketValue)
+        public PositionKeyInfo(string symbol, decimal qty, decimal? unitPrice, decimal? marketValue)
         {
             this.symbol = symbol;
             this.qty = qty;
@@ -36,7 +36,7 @@ namespace MyAlpacaStrategyLib
         /// <summary>
         /// 目前無持倉的假部位
         /// </summary>
-        public PositionKeyOnfo(string symbol):this(symbol, 0m, null, 0m) {  }
+        public PositionKeyInfo(string symbol):this(symbol, 0m, null, 0m) {  }
     }
 
     public static class PositionHelpers
@@ -44,9 +44,9 @@ namespace MyAlpacaStrategyLib
         /// <summary>
         /// 還不知道是否可碎
         /// </summary>
-        public static PositionKeyOnfo GetIPositionKeyInfo(this IPosition position)
+        public static PositionKeyInfo GetIPositionKeyInfo(this IPosition position)
         {
-            return new PositionKeyOnfo(
+            return new PositionKeyInfo(
                 position.Symbol,
                 position.Quantity,
                 position.AssetCurrentPrice,

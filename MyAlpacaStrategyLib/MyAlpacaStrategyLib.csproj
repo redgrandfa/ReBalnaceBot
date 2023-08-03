@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Alpaca.Markets" Version="6.2.1" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="6.0.20" />
   </ItemGroup>
 
 </Project>

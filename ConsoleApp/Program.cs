@@ -56,13 +56,7 @@ namespace AlpacaExample
             }
 
 
-            // OK
-
             //var c = await client.ListOrdersAsync();
-
-            //var a = new ReBalanceOperation();
-            //await a.TryReBalanceAll();
-
 
             //Client.GetAccountAsync()
             //client.CancelAllOrdersAsync();

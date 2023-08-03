@@ -1,5 +1,7 @@
 ﻿using Alpaca.Markets;
 using MyAlpacaStrategyLib;
+using System.Drawing;
+using System.Text;
 
 namespace MyAlpacaStrategyLib
 {
@@ -12,6 +14,8 @@ namespace MyAlpacaStrategyLib
         private static readonly Dictionary<string, PlanItemKeyInfo> plan;
         //當天 一商品可以一直做同一方向，但不可兩向
         private static Dictionary<string, OrderSide?> todayPositionSides;
+
+        private static bool EnableDayTrade = false;
 
         static ReBalanceOperation()
         {
@@ -30,14 +34,14 @@ namespace MyAlpacaStrategyLib
 
             todayPositionSides = new()
             {
-                {"AVUV" ,  null },//OderSide.Buy },
-                {"QVAL" ,  null },//OderSide.Buy },
-                {"DEEP" ,  null },//OderSide.Buy },
-                {"QMOM" ,  null },//OderSide.Buy },
-                {"AVDV" ,  null },//OderSide.Buy },
-                {"IVAL" ,  null },//OderSide.Buy },
-                {"FRDM" ,  null },//OderSide.Buy },
-                {"IMOM" ,  null },//OrderSide.Buy },
+                {"AVUV" ,  null },
+                {"QVAL" ,  null },
+                {"DEEP" ,  null },
+                {"QMOM" ,  null },
+                {"AVDV" ,  null },
+                {"IVAL" ,  null },
+                {"FRDM" ,  null },
+                {"IMOM" ,  null },
             };
         }
 
@@ -52,55 +56,35 @@ namespace MyAlpacaStrategyLib
         }
 
 
+        private readonly IMemoryCacheRepository _cacheRepo;
+        private readonly Logger _logger;
 
-        private IAccount Account { get; set; }
-        public ReBalanceOperation() 
-        { }
+        private AccountKeyInfo AccountKeyInfo;
 
-        public static async Task ExecOnce()
+        public ReBalanceOperation(IMemoryCacheRepository cacheRepo, Logger logger)
         {
-            try
-            {
-                var op = new ReBalanceOperation();
-                await op.TryReBalanceAll();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"TryReBalanceAll EXCEPTION: \n{ex}");
-            }
-            Console.WriteLine("========================");
+            _cacheRepo = cacheRepo;
+            _logger = logger;
         }
 
+
         /// <summary>
-        /// 全部限價單平衡一輪，不一定會成交
+        /// 各部位，限價單平衡一輪，不一定會成交
         /// </summary>
         public async Task TryReBalanceAll() {
-            var cancelAllOrdersTask = client.CancelAllOrdersAsync();
-            var getAccountTask = client.GetAccountAsync();
-            var listPositionsTask = client.ListPositionsAsync();
-
-            await Task.WhenAll(
-                cancelAllOrdersTask,
-                getAccountTask, 
-                listPositionsTask);
-
-            Account = getAccountTask.Result;
-            var allPositions = listPositionsTask.Result;
-
-
+            AccountKeyInfo = await AccountKeyInfo.CreateAccountKeyInfoAsync(client);
 
             //每個 ReBalance項目，所需的部位資訊
-            var positionsToReBalance = new List<PositionKeyOnfo>();
+            var positionsToReBalance = new List<PositionKeyInfo>();
             //需要檢查再平衡的 =  計劃書 U 部位
 
 
-            foreach (var position in allPositions)
+            foreach (var position in AccountKeyInfo.Positions)
             {
                 positionsToReBalance.Add(position.GetIPositionKeyInfo());
             }
 
-            // 不在目前部位裡 / 被更新的計畫納入  必然為買
-            //foreach (var planItem in plan)
+            // 不在目前部位裡
             foreach (var positionSide in todayPositionSides)
             {
                 var symbol = positionSide.Key;
@@ -113,7 +97,7 @@ namespace MyAlpacaStrategyLib
                 }
                 else
                 {
-                    var p = new PositionKeyOnfo(symbol);
+                    var p = new PositionKeyInfo(symbol);
                     positionsToReBalance.Add( p ); //not yet know Fractionable
                 }
             }
@@ -121,42 +105,60 @@ namespace MyAlpacaStrategyLib
 
 
             foreach (var positionKeyInfo in positionsToReBalance) { 
+                StringBuilder sb = new StringBuilder();
+
                 //TODO 是否有必要檢查部位可交易
                 bool isTradable = await client.CheckSymbolTradable(positionKeyInfo.symbol);
-
                 if (isTradable) {
                     var idealMarketValue = 0m;
                     if ( plan.ContainsKey(positionKeyInfo.symbol) )
-                        idealMarketValue = Account.Equity.Value * plan[positionKeyInfo.symbol].percent;
+                        idealMarketValue = AccountKeyInfo.Equity * plan[positionKeyInfo.symbol].percent;
 
-                    await ReBalanceAPosition(positionKeyInfo, idealMarketValue );
+                    await ReBalanceAPosition(positionKeyInfo, idealMarketValue , sb);
                 }
                 else
                 {
-                    Console.WriteLine($"{positionKeyInfo.symbol} 不可交易");
+                    var msg = $"{positionKeyInfo.symbol} 不可交易";
+                    sb.AppendLine(msg);
                 }
+
+                //寫入資料庫
+                _logger.Log(sb.ToString());
             }
         }
 
-        public static async Task ReBalanceAPosition(PositionKeyOnfo positionKeyInfo , decimal idealMarketValue )
+        public async Task ReBalanceAPosition(PositionKeyInfo positionKeyInfo , decimal idealMarketValue , StringBuilder sb)
         {
             string symbol = positionKeyInfo.symbol;
-            Console.WriteLine($"{symbol} Orders:");
+             sb.AppendLine($"{symbol} Orders:");
 
             decimal? marketValue = positionKeyInfo.marketValue;
             if (marketValue == null) {
-                Console.WriteLine("有倉，取不到市值");
+                 sb.AppendLine("有倉，取不到市值");
                 return;
             }
             decimal diffMarketValue = idealMarketValue - (decimal)marketValue;
-
-            // 不符合 此部位 今天能做的方向
-            if (diffMarketValue == 0 
-                || (diffMarketValue > 0 && todayPositionSides[symbol] == OrderSide.Sell)
-                || (diffMarketValue < 0 && todayPositionSides[symbol] == OrderSide.Buy)
-            ) 
+            if ( diffMarketValue == 0 )
             {
-                Console.WriteLine("not today direction");
+                sb.AppendLine($"{nameof(diffMarketValue) } == 0");
+                return;
+            }
+
+            // 【DayTrade - Check Direction】不符合 此部位 今天能做的方向
+            //Func<string, decimal, bool> FilteredBySide = (symbol, diffMarketValue) =>
+            //{
+            //    return (
+            //        || (diffMarketValue > 0 && todayPositionSides[symbol] == OrderSide.Sell)
+            //        || (diffMarketValue < 0 && todayPositionSides[symbol] == OrderSide.Buy)
+            //    );
+            //};
+            //EnableDayTrade &&
+            if (  (
+                (diffMarketValue > 0 && todayPositionSides[symbol] == OrderSide.Sell) ||
+                (diffMarketValue < 0 && todayPositionSides[symbol] == OrderSide.Buy)
+             )) 
+            {
+                sb.AppendLine("not today direction");
                 return;
             }
 
@@ -187,7 +189,7 @@ namespace MyAlpacaStrategyLib
             //else // 股票須整數量
             //{
 
-            decimal unitPrice = 0m; //下單單價
+            decimal unitPrice = 0m;
             decimal diffQty = 0m; 
 
             if ( positionKeyInfo.unitPrice.HasValue )
@@ -205,13 +207,13 @@ namespace MyAlpacaStrategyLib
                 diffQty -= 1m;
             }
 
-            //單價必須兩位小數
-            if(diffMarketValue >= 0) //買 單價要+
+            //單價必須兩位小數。
+            if(diffMarketValue >= 0) //買 單價要+ ，量-
             {
                 unitPrice = Math.Round(unitPrice
                     , 2, MidpointRounding.ToPositiveInfinity);
             }
-            else //賣 單價要-
+            else //賣 單價要- ，量+
             {
                 unitPrice = Math.Round(unitPrice
                     , 2, MidpointRounding.ToNegativeInfinity);
@@ -220,25 +222,37 @@ namespace MyAlpacaStrategyLib
             diffQty += Math.Ceiling(diffMarketValue / unitPrice);
 
             //}
+
+            //TODO: 減少刪單? 紀錄qty和 uniprice ，比較 舊的 訂單qty和 uniprice ：
+            // 拆單情境很麻煩  每一單可能部分成交
+
+            //Guid orderId = null;
+            //IOrder oo = await client.GetOrderAsync(orderId);
+            //var unclosedQty = (oo.Quantity - oo.FilledQuantity) * oo.OrderSide.ToQuantitySign();
+            //if (diffQty == unclosedQty && unitPrice == oo.LimitPrice)
+            //{
+            //    sb.AppendLine($"As old order: {diffQty} shares , price = {unitPrice}");
+            //    return;
+            //}
+                //await client.CancelOrderAsync(orderId);
+
             try
             {
-                if(diffQty > 0)
+                if(diffQty > 0m)
                 {
                     var side = OrderSide.Buy;
                     long q = (long)diffQty;
-                    await client.PostOrderAsync(side.Limit(
+                    var o = await client.PostOrderAsync(side.Limit(
                         symbol,
                         q,
                         unitPrice
                     ));
-                    if (todayPositionSides[symbol] == null)
-                    {
-                        todayPositionSides[symbol] = side;
-                    }
-                    
-                    Console.WriteLine($"\t post order - buy {q} shares , price = {unitPrice}");
+                    sb.AppendLine($"\t post order - buy {q} shares , price = {unitPrice}");
+
+                    // 【DayTrade - Record Direction】 //沒成交...也記錄?....
+                    RecordTodaySide(symbol, side);
                 }
-                else if(diffQty < 0)
+                else if(diffQty < 0m)
                 {
                     var side = OrderSide.Sell;
                     decimal singleOrderQty_lowerBound = Math.Ceiling(SingleOrderAmountLowerBound / unitPrice);
@@ -246,7 +260,7 @@ namespace MyAlpacaStrategyLib
                     while (diffQty < 0m)
                     {
                         var tempQ = diffQty;
-                        if(diffQty < singleOrderQty_lowerBound) //若 會超賣
+                        if(diffQty < singleOrderQty_lowerBound) //若會超賣
                         {
                             tempQ = singleOrderQty_lowerBound;
                         }
@@ -259,18 +273,24 @@ namespace MyAlpacaStrategyLib
                         ));
 
                         diffQty -= singleOrderQty_lowerBound;
-                        Console.WriteLine($"\t post order - sell {q} shares , price = {unitPrice}");
+                         sb.AppendLine($"\t post order - sell {q} shares , price = {unitPrice}");
                     }
 
-                    if (todayPositionSides[symbol] == null)
-                    {
-                        todayPositionSides[symbol] = side;
-                    }
+                    RecordTodaySide(symbol, side);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                 sb.AppendLine(ex.Message);
+            }
+        }
+
+
+        public void RecordTodaySide (string symbol, OrderSide side)
+        {
+            if (todayPositionSides[symbol] == null)
+            {
+                todayPositionSides[symbol] = side;
             }
         }
     }
